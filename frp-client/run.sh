@@ -9,7 +9,7 @@ function stop_frpc() {
 }
 
 bashio::log.info "Copying configuration."
-cp $DEFAULT_CONFIG_PATH $CONFIG_PATH
+# cp $DEFAULT_CONFIG_PATH $CONFIG_PATH
 
 
 bashio::log.info "Starting frp client"
