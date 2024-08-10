@@ -1,6 +1,6 @@
 name: "FRP客户端自定义配置版"
 description: "支持多类型多配置的frp加载项，安装后，访问宿主机/share文件夹，自行创建frpc.toml文件，可借鉴frpc.toml.example"
-version: "1.0.3"
+version: "0.53.0"
 slug: "frp_client_zdy"
 host_network: true
 startup: application
