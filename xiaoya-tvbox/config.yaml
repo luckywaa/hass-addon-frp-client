@@ -1,6 +1,6 @@
 name: "alist-TvBox"
 description: "AList代理，支持界面管理。"
-version: "latest"
+version: "1.0.0"
 slug: "alist-tvbox"
 url: https://github.com/power721/alist-tvbox
 image:  haroldli/xiaoya-tvbox
