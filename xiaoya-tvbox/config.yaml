@@ -13,8 +13,5 @@ ports:
   4567/tcp: 4567
   80/tcp: 5344
 environment:
-  no_proxy: "*.aliyundrive.com"
-  ALIST_PORT: "5344"
-  INSTALL: "xiaoya"
-  MEM_OPT: "-Xmx512M"
+  ALIST_PORT: 5344
 boot: manual
