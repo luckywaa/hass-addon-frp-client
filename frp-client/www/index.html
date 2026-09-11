@@ -7,16 +7,25 @@
 <style>
   body{font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;margin:0;padding:16px;background:#111;color:#eee}
   h1{font-size:1.2rem;margin:0 0 4px}
+  h2{font-size:1.05rem;margin:24px 0 8px;border-bottom:1px solid #333;padding-bottom:6px}
   .sub{color:#999;font-size:.85rem;margin-bottom:12px}
-  textarea{width:100%;box-sizing:border-box;height:60vh;min-height:300px;background:#1c1c1c;color:#e8e8e8;border:1px solid #444;border-radius:8px;padding:12px;font-family:ui-monospace,Consolas,monospace;font-size:13px;line-height:1.5;resize:vertical}
+  textarea{width:100%;box-sizing:border-box;height:48vh;min-height:260px;background:#1c1c1c;color:#e8e8e8;border:1px solid #444;border-radius:8px;padding:12px;font-family:ui-monospace,Consolas,monospace;font-size:13px;line-height:1.5;resize:vertical}
   .bar{display:flex;align-items:center;gap:12px;margin-top:12px;flex-wrap:wrap}
   button{border:none;color:#fff;padding:10px 22px;border-radius:8px;font-size:15px;cursor:pointer}
   button:disabled{opacity:.5;cursor:wait}
+  button.mini{padding:7px 16px;font-size:14px}
   #save{background:#43a047}
   #run{background:#03a9f4}
-  #status{font-size:.9rem}
+  #use,#dl{background:#7e57c2}
+  select,input[type=text]{background:#1c1c1c;color:#e8e8e8;border:1px solid #444;border-radius:8px;padding:8px 10px;font-size:14px}
+  #manualVer{width:110px}
+  #mirrorUrl{width:220px}
+  label{font-size:.9rem;color:#ccc}
+  #status,#dlStatus{font-size:.9rem}
   .ok{color:#7cd67c}.err{color:#ff7b72}.dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:6px}
   .on{background:#7cd67c}.off{background:#ff7b72}
+  .verline{font-size:.9rem;color:#ccc;margin:6px 0}
+  .verline b{color:#6ec6ff}
 </style>
 </head>
 <body>
@@ -29,11 +38,38 @@
   <span id="status"></span>
   <span id="runState" style="margin-left:auto"></span>
 </div>
+
+<h2>frp 版本</h2>
+<div class="verline">当前版本 <b id="curVer">-</b> · 内置版本 <span id="builtinVer">-</span> · CPU架构 <span id="arch">-</span>（自动识别）</div>
+<div class="bar">
+  <label>已安装:</label>
+  <select id="instSel"></select>
+  <button id="use" class="mini">使用</button>
+</div>
+<div class="bar">
+  <label>下载新版:</label>
+  <select id="availSel"></select>
+  <input type="text" id="manualVer" placeholder="或输入版本号">
+  <button id="dl" class="mini">下载并使用</button>
+</div>
+<div class="bar">
+  <label><input type="checkbox" id="mirrorChk"> 镜像加速</label>
+  <input type="text" id="mirrorUrl" value="https://ghfast.top/">
+  <span id="dlStatus"></span>
+</div>
+<div class="sub" style="margin-top:8px">切换版本后只保留当前使用的版本，旧版本自动清理；切回内置版本会清空已下载版本。</div>
+
 <script>
 const ta=document.getElementById('toml'),btnSave=document.getElementById('save'),
       btnRun=document.getElementById('run'),st=document.getElementById('status'),
-      runState=document.getElementById('runState');
-let running=false;
+      runState=document.getElementById('runState'),
+      curVer=document.getElementById('curVer'),builtinVer=document.getElementById('builtinVer'),
+      archEl=document.getElementById('arch'),instSel=document.getElementById('instSel'),
+      availSel=document.getElementById('availSel'),manualVer=document.getElementById('manualVer'),
+      btnUse=document.getElementById('use'),btnDl=document.getElementById('dl'),
+      mirrorChk=document.getElementById('mirrorChk'),mirrorUrl=document.getElementById('mirrorUrl'),
+      dlSt=document.getElementById('dlStatus');
+let running=false,lastSelected='',dlPrev='idle';
 
 fetch('cgi-bin/load').then(r=>r.json()).then(d=>{ta.value=d.toml||'';}).catch(()=>{});
 
@@ -42,9 +78,53 @@ function refresh(){
     running=!!d.running;
     btnRun.textContent=running?'重启 frpc':'启动 frpc';
     runState.innerHTML=running?'<span class="dot on"></span>frpc 运行中':'<span class="dot off"></span>frpc 未运行';
+    curVer.textContent=d.current||'-';
+    builtinVer.textContent=d.builtin||'-';
+    archEl.textContent=d.arch||'-';
+    lastSelected=d.selected||'';
+    if(document.activeElement!==instSel) instSel.value=lastSelected;
+    if(d.dl){
+      btnDl.disabled=(d.dl.state==='running');
+      if(d.dl.state==='running'){dlSt.className='';dlSt.textContent='下载中 '+d.dl.version+'…';}
+      else if(d.dl.state==='fail'){dlSt.className='err';dlSt.textContent='下载失败 '+d.dl.version+'：'+(d.dl.error||'');}
+      else if(d.dl.state==='done'){dlSt.className='ok';dlSt.textContent='已安装并切换到 '+d.dl.version;}
+      else dlSt.textContent='';
+      if(dlPrev==='running'&&d.dl.state==='done') loadInstalled();
+      dlPrev=d.dl.state;
+    }
   }).catch(()=>{runState.textContent='';});
 }
 refresh();setInterval(refresh,3000);
+
+function loadInstalled(){
+  fetch('cgi-bin/frp/installed').then(r=>r.json()).then(d=>{
+    const list=(d.installed||[]).sort((a,b)=>b.localeCompare(a,undefined,{numeric:true}));
+    instSel.innerHTML='';
+    instSel.add(new Option('内置 '+d.builtin,''));
+    list.forEach(v=>instSel.add(new Option(v,v)));
+    instSel.value=lastSelected||'';
+  }).catch(()=>{});
+}
+loadInstalled();
+
+function loadAvail(){
+  availSel.innerHTML='';
+  availSel.add(new Option('获取版本列表…',''));
+  const body=mirrorChk.checked?mirrorUrl.value.trim():'';
+  fetch('cgi-bin/frp/available',{method:'POST',body}).then(r=>r.json()).then(d=>{
+    availSel.innerHTML='';
+    if(d.versions&&d.versions.length){
+      d.versions.forEach(v=>availSel.add(new Option(v,v)));
+    }else{
+      availSel.add(new Option(d.error||'获取失败，请手动输入版本号',''));
+    }
+  }).catch(()=>{
+    availSel.innerHTML='';
+    availSel.add(new Option('获取失败，请手动输入版本号',''));
+  });
+}
+loadAvail();
+mirrorChk.onchange=loadAvail;
 
 btnSave.onclick=()=>{
   btnSave.disabled=true;st.className='';st.textContent='保存中…';
@@ -64,6 +144,37 @@ btnRun.onclick=()=>{
     .then(()=>{st.className='ok';st.textContent='已生效，等待frpc连接…';setTimeout(refresh,1500);setTimeout(refresh,4000);setTimeout(refresh,8000);})
     .catch(()=>{st.className='err';st.textContent='操作失败，请查看加载项日志';})
     .finally(()=>{btnRun.disabled=false;btnSave.disabled=false;});
+};
+
+btnUse.onclick=()=>{
+  const v=instSel.value;
+  btnUse.disabled=true;dlSt.className='';dlSt.textContent='切换中…';
+  fetch('cgi-bin/frp/select',{method:'POST',body:v})
+    .then(r=>r.json())
+    .then(d=>{
+      if(!d.ok){dlSt.className='err';dlSt.textContent=d.error||'切换失败';}
+      else{
+        dlSt.className='ok';
+        dlSt.textContent=(v?('已切换到 '+v):('已切回内置版本'))+(d.restarting?'，正在重启frpc…':'，将在下次启动时生效');
+        setTimeout(refresh,1500);setTimeout(refresh,4000);
+      }
+    })
+    .catch(()=>{dlSt.className='err';dlSt.textContent='请求失败';})
+    .finally(()=>{btnUse.disabled=false;});
+};
+
+btnDl.onclick=()=>{
+  const v=(manualVer.value.trim()||availSel.value||'').trim();
+  if(!/^[0-9][0-9.]*$/.test(v)){dlSt.className='err';dlSt.textContent='请选择或输入有效版本号（如 0.71.0）';return;}
+  if(mirrorChk.checked&&!/^https?:\/\//.test(mirrorUrl.value.trim())){dlSt.className='err';dlSt.textContent='镜像地址需以 http:// 或 https:// 开头';return;}
+  btnDl.disabled=true;dlSt.className='';dlSt.textContent='开始下载 '+v+'…';
+  dlPrev='running';
+  fetch('cgi-bin/frp/download',{method:'POST',body:v+'\n'+(mirrorChk.checked?mirrorUrl.value.trim():'')})
+    .then(r=>r.json())
+    .then(d=>{
+      if(!d.ok){dlSt.className='err';dlSt.textContent=d.error||'下载启动失败';btnDl.disabled=false;}
+    })
+    .catch(()=>{dlSt.className='err';dlSt.textContent='请求失败';btnDl.disabled=false;});
 };
 </script>
 </body>

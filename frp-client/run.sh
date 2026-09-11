@@ -30,7 +30,8 @@ mkdir -p /data
 # - 127.0.0.1：本机回环
 # - hassio网桥网关：Supervisor的ingress代理对host_network加载项走这个地址
 nc -lk -s 127.0.0.1 -p ${WWW_PORT} -e /www/handler.sh & WEB_PID=$!
-HASSIO_GW="$(ip addr show hassio 2>/dev/null | awk '/inet /{print $2}' | cut -d/ -f1 | head -1)"
+# 注意：hassio网卡不存在时ip返回1，pipefail下会让赋值语句带着errexit杀掉脚本，必须||true
+HASSIO_GW="$(ip addr show hassio 2>/dev/null | awk '/inet /{print $2}' | cut -d/ -f1 | head -1 || true)"
 if [ -z "${HASSIO_GW}" ]; then
     HASSIO_GW='172.30.32.1'  # HAOS默认hassio网桥网关
 fi
@@ -51,8 +52,27 @@ else
     bashio::log.warning "尚无配置：请通过网页配置页（HA侧边栏）粘贴frpc.toml，保存后点击启动"
 fi
 
+# 解析当前使用的frpc：/data/frp-version指定且已安装则用下载版，否则用镜像内置版
+function resolve_frpc() {
+    FRPC_BIN='/usr/src/frpc'
+    FRPC_VER="$(cat /usr/src/.frpc-version 2>/dev/null || true)"
+    if [ -z "${FRPC_VER}" ]; then
+        FRPC_VER="$(/usr/src/frpc -v 2>/dev/null || true)"
+    fi
+    if [ -s /data/frp-version ]; then
+        local sel
+        sel="$(cat /data/frp-version 2>/dev/null || true)"
+        if [ -n "${sel}" ] && [ -x "/data/frp-versions/${sel}/frpc" ]; then
+            FRPC_BIN="/data/frp-versions/${sel}/frpc"
+            FRPC_VER="${sel}"
+        fi
+    fi
+}
+
 function start_frpc() {
-    (cd /usr/src && exec ./frpc -c "${CONFIG_PATH}") & FRPC_PID=$!
+    resolve_frpc
+    bashio::log.info "使用frpc ${FRPC_VER}（${FRPC_BIN}）"
+    (cd /usr/src && exec "${FRPC_BIN}" -c "${CONFIG_PATH}") & FRPC_PID=$!
     echo "${FRPC_PID}" > "${PID_PATH}"
     EXPECTED_RUNNING='true'
 }
