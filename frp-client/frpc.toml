@@ -3,15 +3,16 @@ serverPort = 7000
 auth.method = "token"
 auth.token = "123456789"
 
-log.to = "/share/frpc.log"
+# console表示输出到插件日志，也可改为其他可写路径的日志文件
+log.to = "console"
 # trace, debug, info, warn, error
 log.level = "trace"
 log.maxDays = 3
 
 # transport.tls.enable = false
-# transport.tls.certFile = "/share/frp/fullchain.pem"
-# transport.tls.keyFile = "/share/frp/privkey.pem"
-# transport.tls.trustedCaFile = "/share/frp/fullchain.pem"
+# transport.tls.certFile = "/data/frp/fullchain.pem"
+# transport.tls.keyFile = "/data/frp/privkey.pem"
+# transport.tls.trustedCaFile = "/data/frp/fullchain.pem"
 # transport.tls.serverName = "your_server_name"
 
 webServer.addr = "0.0.0.0"
@@ -31,8 +32,8 @@ localIP = "0.0.0.0"
 # [proxies.plugin]
 # type = "https2http"
 # localAddr = "your_ip:8123"
-# crtPath = "/share/frp/fullchain.pem"
-# keyPath = "/share/frp/privkey.pem"
+# crtPath = "/data/frp/fullchain.pem"
+# keyPath = "/data/frp/privkey.pem"
 # hostHeaderRewrite = "your_host_header_rewrite"
 # requestHeaders.set.x-from-where = "frp"
 

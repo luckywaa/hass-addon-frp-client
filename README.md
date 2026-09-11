@@ -2,7 +2,7 @@
 
 ⚠️ **Note: This README corresponds to v1.0.0 and may not fully reflect the current state of the repository. Please change to the specific tag for the most accurate information.**
 
-安装后，访问宿主机/share文件夹，自行创建frpc.toml文件，可借鉴frpc.toml.example
+安装后，在插件配置页面将 frpc.toml 的内容粘贴到 frpc_config 输入框并保存，可借鉴frpc.toml.example
 
 ## Author
 Xiaoxu Hu admin@ihuxu.com
