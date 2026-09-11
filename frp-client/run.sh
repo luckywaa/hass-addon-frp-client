@@ -49,16 +49,13 @@ bashio::log.info "网页配置页已启动(127.0.0.1与${HASSIO_GW}:${WWW_PORT})
 if [ -s "${CONFIG_PATH}" ]; then
     printf 'start' > "${CMD_PATH}"
 else
-    bashio::log.warning "尚无配置：请通过网页配置页（HA侧边栏）粘贴frpc.toml，保存后点击启动"
+    bashio::log.warning "尚无配置：请通过网页配置页（HA侧边栏）安装frp版本并粘贴frpc.toml，保存后点击启动"
 fi
 
-# 解析当前使用的frpc：/data/frp-version指定且已安装则用下载版，否则用镜像内置版
+# 解析当前使用的frpc：镜像不内置，只用/data/frp-version指定且已下载的版本
 function resolve_frpc() {
-    FRPC_BIN='/usr/src/frpc'
-    FRPC_VER="$(cat /usr/src/.frpc-version 2>/dev/null || true)"
-    if [ -z "${FRPC_VER}" ]; then
-        FRPC_VER="$(/usr/src/frpc -v 2>/dev/null || true)"
-    fi
+    FRPC_BIN=''
+    FRPC_VER=''
     if [ -s /data/frp-version ]; then
         local sel
         sel="$(cat /data/frp-version 2>/dev/null || true)"
@@ -71,8 +68,13 @@ function resolve_frpc() {
 
 function start_frpc() {
     resolve_frpc
+    if [ -z "${FRPC_BIN}" ]; then
+        bashio::log.warning "尚未安装frp版本，请先在网页配置页的「frp版本」区块下载安装"
+        EXPECTED_RUNNING='false'
+        return 0
+    fi
     bashio::log.info "使用frpc ${FRPC_VER}（${FRPC_BIN}）"
-    (cd /usr/src && exec "${FRPC_BIN}" -c "${CONFIG_PATH}") & FRPC_PID=$!
+    (cd /data && exec "${FRPC_BIN}" -c "${CONFIG_PATH}") & FRPC_PID=$!
     echo "${FRPC_PID}" > "${PID_PATH}"
     EXPECTED_RUNNING='true'
 }

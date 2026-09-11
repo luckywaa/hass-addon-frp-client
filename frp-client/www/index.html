@@ -30,7 +30,7 @@
 </head>
 <body>
 <h1>FRP 客户端配置</h1>
-<div class="sub">粘贴 frpc.toml 内容后点击「保存」（仅保存）或「启动/重启」（保存并立即生效）。首次使用可参考 <a style="color:#6ec6ff" href="https://gofrp.org/zh-cn/docs/reference/config-reference/" target="_blank" rel="noreferrer">frpc 配置文档</a>。</div>
+<div class="sub">首次使用：先在下方「frp 版本」选择并下载一个版本，再粘贴 frpc.toml，点「启动 frpc」。配置可参考 <a style="color:#6ec6ff" href="https://gofrp.org/zh-cn/docs/reference/config-reference/" target="_blank" rel="noreferrer">frpc 配置文档</a>。</div>
 <textarea id="toml" spellcheck="false" placeholder="serverAddr = ..."></textarea>
 <div class="bar">
   <button id="save">保存</button>
@@ -40,7 +40,7 @@
 </div>
 
 <h2>frp 版本</h2>
-<div class="verline">当前版本 <b id="curVer">-</b> · 内置版本 <span id="builtinVer">-</span> · CPU架构 <span id="arch">-</span>（自动识别）</div>
+<div class="verline">当前版本 <b id="curVer">-</b> · CPU架构 <span id="arch">-</span>（自动识别，镜像不内置frp，版本在此下载）</div>
 <div class="bar">
   <label>已安装:</label>
   <select id="instSel"></select>
@@ -57,19 +57,19 @@
   <input type="text" id="mirrorUrl" value="https://ghfast.top/">
   <span id="dlStatus"></span>
 </div>
-<div class="sub" style="margin-top:8px">切换版本后只保留当前使用的版本，旧版本自动清理；切回内置版本会清空已下载版本。</div>
+<div class="sub" style="margin-top:8px">下载完成会自动切换为当前版本；切换/下载新版本只保留新版本，旧版本自动清理。</div>
 
 <script>
 const ta=document.getElementById('toml'),btnSave=document.getElementById('save'),
       btnRun=document.getElementById('run'),st=document.getElementById('status'),
       runState=document.getElementById('runState'),
-      curVer=document.getElementById('curVer'),builtinVer=document.getElementById('builtinVer'),
-      archEl=document.getElementById('arch'),instSel=document.getElementById('instSel'),
+      curVer=document.getElementById('curVer'),archEl=document.getElementById('arch'),
+      instSel=document.getElementById('instSel'),
       availSel=document.getElementById('availSel'),manualVer=document.getElementById('manualVer'),
       btnUse=document.getElementById('use'),btnDl=document.getElementById('dl'),
       mirrorChk=document.getElementById('mirrorChk'),mirrorUrl=document.getElementById('mirrorUrl'),
       dlSt=document.getElementById('dlStatus');
-let running=false,lastSelected='',dlPrev='idle';
+let running=false,lastSelected='',lastCurrent='',dlPrev='idle';
 
 fetch('cgi-bin/load').then(r=>r.json()).then(d=>{ta.value=d.toml||'';}).catch(()=>{});
 
@@ -78,10 +78,10 @@ function refresh(){
     running=!!d.running;
     btnRun.textContent=running?'重启 frpc':'启动 frpc';
     runState.innerHTML=running?'<span class="dot on"></span>frpc 运行中':'<span class="dot off"></span>frpc 未运行';
-    curVer.textContent=d.current||'-';
-    builtinVer.textContent=d.builtin||'-';
+    curVer.textContent=d.current||'未安装';
     archEl.textContent=d.arch||'-';
     lastSelected=d.selected||'';
+    lastCurrent=d.current||'';
     if(document.activeElement!==instSel) instSel.value=lastSelected;
     if(d.dl){
       btnDl.disabled=(d.dl.state==='running');
@@ -100,9 +100,14 @@ function loadInstalled(){
   fetch('cgi-bin/frp/installed').then(r=>r.json()).then(d=>{
     const list=(d.installed||[]).sort((a,b)=>b.localeCompare(a,undefined,{numeric:true}));
     instSel.innerHTML='';
-    instSel.add(new Option('内置 '+d.builtin,''));
-    list.forEach(v=>instSel.add(new Option(v,v)));
-    instSel.value=lastSelected||'';
+    if(!list.length){
+      instSel.add(new Option('（未安装版本）',''));
+      btnUse.disabled=true;
+    }else{
+      btnUse.disabled=false;
+      list.forEach(v=>instSel.add(new Option(v,v)));
+      instSel.value=lastSelected||list[0];
+    }
   }).catch(()=>{});
 }
 loadInstalled();
@@ -136,6 +141,7 @@ btnSave.onclick=()=>{
 };
 
 btnRun.onclick=()=>{
+  if(!lastCurrent){st.className='err';st.textContent='请先在下方「frp 版本」下载安装一个版本';return;}
   btnRun.disabled=true;btnSave.disabled=true;
   st.className='';st.textContent='保存并'+(running?'重启':'启动')+'中…';
   fetch('cgi-bin/save',{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:ta.value})
@@ -155,7 +161,7 @@ btnUse.onclick=()=>{
       if(!d.ok){dlSt.className='err';dlSt.textContent=d.error||'切换失败';}
       else{
         dlSt.className='ok';
-        dlSt.textContent=(v?('已切换到 '+v):('已切回内置版本'))+(d.restarting?'，正在重启frpc…':'，将在下次启动时生效');
+        dlSt.textContent='已切换到 '+v+(d.restarting?'，正在重启frpc…':'，将在下次启动时生效');
         setTimeout(refresh,1500);setTimeout(refresh,4000);
       }
     })

@@ -6,7 +6,5 @@
       "armv7": "homeassistant/armv7-base:3.10",
       "i386": "homeassistant/i386-base:3.10"
     },
-    "args": {
-        "FRP_VERSION": "0.71.0"
-    }
+    "args": {}
 }

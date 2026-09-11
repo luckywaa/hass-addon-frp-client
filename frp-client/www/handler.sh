@@ -45,14 +45,13 @@ function go_arch() {
     esac
 }
 
-# 设置 BUILTIN / SELECTED / CURRENT 三个版本变量
+# 设置 SELECTED / CURRENT 版本变量（镜像不内置frpc，版本全部来自/data）
 function current_versions() {
-    BUILTIN="$(cat /usr/src/.frpc-version 2>/dev/null || /usr/src/frpc -v 2>/dev/null || printf 'unknown')"
     SELECTED=''
     if [ -s /data/frp-version ]; then
         SELECTED="$(cat /data/frp-version 2>/dev/null)"
     fi
-    CURRENT="${BUILTIN}"
+    CURRENT=''
     if [ -n "${SELECTED}" ] && [ -x "/data/frp-versions/${SELECTED}/frpc" ]; then
         CURRENT="${SELECTED}"
     fi
@@ -78,8 +77,8 @@ case "${ROUTE}" in
               read -r DL_VER || true
               IFS= read -r DL_ERR || true; } < /tmp/frp.download.state
         fi
-        printf '{"running":%s,"current":"%s","selected":"%s","builtin":"%s","arch":"%s","dl":{"state":"%s","version":"%s","error":"%s"}}' \
-            "${RUNNING}" "${CURRENT}" "${SELECTED}" "${BUILTIN}" "$(go_arch)" \
+        printf '{"running":%s,"current":"%s","selected":"%s","arch":"%s","dl":{"state":"%s","version":"%s","error":"%s"}}' \
+            "${RUNNING}" "${CURRENT}" "${SELECTED}" "$(go_arch)" \
             "${DL_STATE}" "${DL_VER}" "${DL_ERR}"
         ;;
     "/cgi-bin/save")
@@ -113,7 +112,6 @@ case "${ROUTE}" in
         ;;
     "/cgi-bin/frp/installed")
         respond "200 OK" "application/json"
-        current_versions
         INSTALLED='[]'
         if [ -d /data/frp-versions ]; then
             FOUND=''
@@ -125,7 +123,7 @@ case "${ROUTE}" in
                 INSTALLED="$(printf '%s' "${FOUND}" | jq -Rsc 'split("\n")[:-1]')"
             fi
         fi
-        printf '{"builtin":"%s","installed":%s}' "${BUILTIN}" "${INSTALLED}"
+        printf '{"installed":%s}' "${INSTALLED}"
         ;;
     "/cgi-bin/frp/available")
         # POST正文=镜像前缀(可空)；列表获取失败自动换源
@@ -180,37 +178,29 @@ case "${ROUTE}" in
         printf '{"ok":true}'
         ;;
     "/cgi-bin/frp/select")
-        # POST正文=版本号(空=用回内置版本)；已安装才允许切换
+        # POST正文=已安装的版本号；切换后只保留该版本
         if [ "${METHOD}" != "POST" ]; then
             respond "405 Method Not Allowed" "application/json"
             printf '{"ok":false}'
             exit 0
         fi
         V="$(read_body | tr -d '\r')"
-        if [ -n "${V}" ]; then
-            if ! printf '%s' "${V}" | grep -q '^[0-9][0-9.]*$'; then
-                respond "400 Bad Request" "application/json"
-                printf '{"ok":false,"error":"版本号无效"}'
-                exit 0
-            fi
-            if [ ! -x "/data/frp-versions/${V}/frpc" ]; then
-                respond "400 Bad Request" "application/json"
-                printf '{"ok":false,"error":"该版本未安装"}'
-                exit 0
-            fi
-            printf '%s' "${V}" > /data/frp-version
-            # 只保留切换到的版本，清理其他已下载版本
-            for D in /data/frp-versions/*/; do
-                [ "${D}" = "/data/frp-versions/${V}/" ] && continue
-                rm -rf "${D}" 2>/dev/null
-            done
-        else
-            rm -f /data/frp-version
-            # 切回内置版本：清空已下载版本
-            for D in /data/frp-versions/*/; do
-                rm -rf "${D}" 2>/dev/null
-            done
+        if ! printf '%s' "${V}" | grep -q '^[0-9][0-9.]*$'; then
+            respond "400 Bad Request" "application/json"
+            printf '{"ok":false,"error":"版本号无效"}'
+            exit 0
         fi
+        if [ ! -x "/data/frp-versions/${V}/frpc" ]; then
+            respond "400 Bad Request" "application/json"
+            printf '{"ok":false,"error":"该版本未安装"}'
+            exit 0
+        fi
+        printf '%s' "${V}" > /data/frp-version
+        # 只保留切换到的版本，清理其他已下载版本
+        for D in /data/frp-versions/*/; do
+            [ "${D}" = "/data/frp-versions/${V}/" ] && continue
+            rm -rf "${D}" 2>/dev/null
+        done
         RESTART='false'
         if frpc_running; then
             printf 'restart' > /tmp/frpc.cmd
