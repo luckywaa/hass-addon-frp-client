@@ -1,6 +1,6 @@
 name: "FRP客户端自定义配置版"
 description: "网页配置页直接粘贴frpc.toml，支持启动/重启与看门狗自动拉起"
-version: "0.59.0-4"
+version: "0.59.0-5"
 slug: "frp_client_zdy"
 host_network: true
 startup: application

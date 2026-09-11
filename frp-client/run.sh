@@ -5,6 +5,7 @@ CMD_PATH='/tmp/frpc.cmd'
 WWW_PORT=8080
 FRPC_PID=''
 WEB_PID=''
+WEB_PID2=''
 EXPECTED_RUNNING='false'
 
 function stop_all() {
@@ -15,6 +16,9 @@ function stop_all() {
     if [ -n "${WEB_PID}" ]; then
         kill "${WEB_PID}" 2>/dev/null || true
     fi
+    if [ -n "${WEB_PID2}" ]; then
+        kill "${WEB_PID2}" 2>/dev/null || true
+    fi
     exit 0
 }
 trap stop_all SIGTERM SIGHUP
@@ -22,9 +26,23 @@ trap stop_all SIGTERM SIGHUP
 # HA会挂载/data；裸跑（如独立docker测试）时兜底创建
 mkdir -p /data
 
-# 启动内置网页配置页：busybox nc监听本机回环，handler.sh处理请求（通过HA ingress访问）
+# 启动内置网页配置页（通过HA ingress访问）：
+# - 127.0.0.1：本机回环
+# - hassio网桥网关：Supervisor的ingress代理对host_network加载项走这个地址
 nc -lk -s 127.0.0.1 -p ${WWW_PORT} -e /www/handler.sh & WEB_PID=$!
-bashio::log.info "网页配置页已启动，可在HA侧边栏打开本加载项"
+HASSIO_GW="$(ip addr show hassio 2>/dev/null | awk '/inet /{print $2}' | cut -d/ -f1 | head -1)"
+if [ -z "${HASSIO_GW}" ]; then
+    HASSIO_GW='172.30.32.1'  # HAOS默认hassio网桥网关
+fi
+nc -lk -s "${HASSIO_GW}" -p ${WWW_PORT} -e /www/handler.sh & WEB_PID2=$!
+sleep 0.5
+if ! kill -0 "${WEB_PID}" 2>/dev/null; then
+    bashio::log.warning "网页服务绑定127.0.0.1:${WWW_PORT}失败"
+fi
+if ! kill -0 "${WEB_PID2}" 2>/dev/null; then
+    bashio::log.warning "网页服务绑定${HASSIO_GW}:${WWW_PORT}失败，ingress可能无法访问"
+fi
+bashio::log.info "网页配置页已启动(127.0.0.1与${HASSIO_GW}:${WWW_PORT})，可在HA侧边栏打开本加载项"
 
 # 已有配置则自动启动frpc；没有则等待网页端发来的启动命令
 if [ -s "${CONFIG_PATH}" ]; then
