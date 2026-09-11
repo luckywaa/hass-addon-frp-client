@@ -2,12 +2,14 @@
 
 ⚠️ **Note: This README corresponds to v1.0.0 and may not fully reflect the current state of the repository. Please change to the specific tag for the most accurate information.**
 
-安装后，在插件配置页面填写 frpc 配置并保存，可借鉴frpc.toml.example。
+安装后，在 HA 侧边栏打开本加载项的网页配置页（或加载项页面的“打开Web界面”），把 frpc.toml 内容直接粘贴进文本框，点“保存并生效”，frpc 会自动加载新配置。可借鉴frpc.toml.example。
 
-**注意：配置页面的输入框是单行的，直接粘贴多行TOML会丢失换行。** 推荐两种方式：
+**备用方式**（不使用网页配置页时）：插件配置页的两个选项，二选一：
 
-1. **frpc_config_base64（推荐）**：将frpc.toml整个文件base64编码后粘贴到该输入框（PowerShell：`[Convert]::ToBase64String([IO.File]::ReadAllBytes("frpc.toml"))`；Linux：`base64 -w0 frpc.toml`）。填写后优先生效。
-2. **frpc_config**：将TOML内容压成一行，行与行之间用字面`\n`分隔（可在编辑器里把换行全部替换成`\n`再粘贴），插件会自动还原成多行。
+1. **frpc_config_base64（推荐）**：将frpc.toml整个文件base64编码后粘贴（PowerShell：`[Convert]::ToBase64String([IO.File]::ReadAllBytes("frpc.toml"))`；Linux：`base64 -w0 frpc.toml`）。
+2. **frpc_config**：TOML压成一行，行与行之间用字面`\n`分隔（编辑器里把换行替换成`\n`再粘贴）。
+
+> 注意：加载项配置页的输入框是单行的，直接粘贴多行内容会丢失换行；网页配置页没有此限制。选项内容只在首次启动时作为初始配置导入，之后以网页编辑器保存的 `/data/frpc.toml` 为准。
 
 ## Author
 Xiaoxu Hu admin@ihuxu.com

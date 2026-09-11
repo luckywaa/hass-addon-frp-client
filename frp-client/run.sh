@@ -1,45 +1,83 @@
 #!/usr/bin/env bashio
-WAIT_PIDS=()
-CONFIG_PATH='/tmp/frpc.toml'
+CONFIG_PATH='/data/frpc.toml'
+PID_PATH='/tmp/frpc.pid'
+WWW_PORT=8080
+FRPC_PID=''
+WEB_PID=''
 
-function stop_frpc() {
-    bashio::log.info "Shutdown frpc client"
-    kill -15 "${WAIT_PIDS[@]}"
+function stop_all() {
+    bashio::log.info "Shutdown frp client"
+    if [ -n "${FRPC_PID}" ]; then
+        kill "${FRPC_PID}" 2>/dev/null || true
+    fi
+    if [ -n "${WEB_PID}" ]; then
+        kill "${WEB_PID}" 2>/dev/null || true
+    fi
+    exit 0
 }
+trap stop_all SIGTERM SIGHUP
 
-# 旧版bashio的config()内部read会返回非零，触发errexit，必须用|| true保护
-FRPC_CONFIG="$(bashio::config 'frpc_config' || true)"
-FRPC_CONFIG_B64="$(bashio::config 'frpc_config_base64' || true)"
+# HA会挂载/data；裸跑（如独立docker测试）时兜底创建
+mkdir -p /data
 
-# 页面输入框是单行的，换行会丢失；base64粘贴零损失，作为推荐方式，填写后优先生效
-if [[ -n "${FRPC_CONFIG_B64}" && "${FRPC_CONFIG_B64}" != "null" ]]; then
-    FRPC_CONFIG="$(printf '%s' "${FRPC_CONFIG_B64}" | tr -d ' \t\r\n' | base64 -d 2>/dev/null || true)"
-    if [[ -z "${FRPC_CONFIG}" ]]; then
-        bashio::log.error "frpc_config_base64解码失败，请检查是否为完整的base64内容"
-        bashio::exit.nok
+# 首次启动时，把插件选项里的配置导入为初始文件（之后以网页编辑器保存的文件为准）
+if [ ! -f "${CONFIG_PATH}" ]; then
+    SEED="$(bashio::config 'frpc_config_base64' || true)"
+    if [ -n "${SEED}" ] && [ "${SEED}" != "null" ]; then
+        SEED="$(printf '%s' "${SEED}" | tr -d ' \t\r\n' | base64 -d 2>/dev/null || true)"
+    else
+        SEED="$(bashio::config 'frpc_config' || true)"
+        # 兼容单行输入：字面\n转真实换行
+        if [ -n "${SEED}" ] && [ "${SEED}" != "null" ]; then
+            if [[ "${SEED}" != *$'\n'* && "${SEED}" == *'\n'* ]]; then
+                SEED="${SEED//\\n/$'\n'}"
+            fi
+        fi
+    fi
+    if [ -n "${SEED}" ] && [ "${SEED}" != "null" ]; then
+        printf '%s\n' "${SEED}" > "${CONFIG_PATH}"
+        bashio::log.info "已从插件选项导入初始配置到${CONFIG_PATH}"
     fi
 fi
 
-if [[ -z "${FRPC_CONFIG}" || "${FRPC_CONFIG}" == "null" ]]; then
-    bashio::log.error "未在插件配置页面填写frpc配置(frpc_config或frpc_config_base64)，请填写后保存并重启插件"
-    bashio::exit.nok
-fi
+# 启动内置网页配置页：busybox nc监听本机回环，handler.sh处理请求（通过HA ingress访问）
+nc -lk -s 127.0.0.1 -p ${WWW_PORT} -e /www/handler.sh & WEB_PID=$!
+bashio::log.info "网页配置页已启动，可在HA侧边栏打开本加载项直接粘贴配置"
 
-# 若配置内容被前端挤成单行且只含字面\n，自动转换为真实换行
-if [[ "${FRPC_CONFIG}" != *$'\n'* && "${FRPC_CONFIG}" == *'\n'* ]]; then
-    bashio::log.warning "配置内容为单行，已自动将字面\\n转换为换行"
-    FRPC_CONFIG="${FRPC_CONFIG//\\n/$'\n'}"
-fi
+# 主循环：配置文件变化时自动重启frpc；frpc异常退出后自动拉起
+LAST_HASH='__init__'
+while true; do
+    NEW_HASH="$(md5sum "${CONFIG_PATH}" 2>/dev/null || true)"
+    NEW_HASH="${NEW_HASH%% *}"
 
-printf '%s\n' "${FRPC_CONFIG}" > "${CONFIG_PATH}"
+    ALIVE='false'
+    if [ -n "${FRPC_PID}" ] && kill -0 "${FRPC_PID}" 2>/dev/null; then
+        ALIVE='true'
+    fi
 
-bashio::log.info "已生成配置文件${CONFIG_PATH}，共$(grep -c '' "${CONFIG_PATH}")行"
-cat "${CONFIG_PATH}"
-
-bashio::log.info "尝试启动frpc，若失败，请仔细检查配置，并到插件配置页面修改"
-
-cd /usr/src
-./frpc -c "${CONFIG_PATH}" & WAIT_PIDS+=($!)
-
-trap "stop_frpc" SIGTERM SIGHUP
-wait "${WAIT_PIDS[@]}"
+    if [ "${NEW_HASH}" != "${LAST_HASH}" ]; then
+        if [ "${ALIVE}" = 'true' ]; then
+            bashio::log.info "配置已变化，正在重启frpc"
+            kill "${FRPC_PID}" 2>/dev/null || true
+            sleep 1
+            kill -9 "${FRPC_PID}" 2>/dev/null || true
+        fi
+        if [ -n "${NEW_HASH}" ]; then
+            bashio::log.info "启动frpc"
+            (cd /usr/src && exec ./frpc -c "${CONFIG_PATH}") & FRPC_PID=$!
+            echo "${FRPC_PID}" > "${PID_PATH}"
+        else
+            FRPC_PID=''
+            bashio::log.warning "尚无配置：请通过网页配置页（HA侧边栏）粘贴frpc.toml并保存"
+        fi
+        LAST_HASH="${NEW_HASH}"
+    else
+        if [ "${ALIVE}" = 'false' ] && [ -n "${FRPC_PID}" ]; then
+            bashio::log.warning "frpc已退出，5秒后重新拉起（若反复退出请检查配置内容）"
+            sleep 5
+            (cd /usr/src && exec ./frpc -c "${CONFIG_PATH}") & FRPC_PID=$!
+            echo "${FRPC_PID}" > "${PID_PATH}"
+        fi
+    fi
+    sleep 2
+done
