@@ -1,6 +1,6 @@
 name: "FRP客户端自定义配置版"
 description: "支持多类型多配置的frp加载项，直接在配置页面将frpc.toml内容粘贴到frpc_config即可"
-version: "0.59.0-1"
+version: "0.59.0-2"
 slug: "frp_client_zdy"
 host_network: true
 startup: application
@@ -18,6 +18,8 @@ arch:
   - i386
 options:
   frpc_config: ""
+  frpc_config_base64: ""
 schema:
   frpc_config: str?
+  frpc_config_base64: str?
 

@@ -9,9 +9,19 @@ function stop_frpc() {
 
 # 旧版bashio的config()内部read会返回非零，触发errexit，必须用|| true保护
 FRPC_CONFIG="$(bashio::config 'frpc_config' || true)"
+FRPC_CONFIG_B64="$(bashio::config 'frpc_config_base64' || true)"
+
+# 页面输入框是单行的，换行会丢失；base64粘贴零损失，作为推荐方式，填写后优先生效
+if [[ -n "${FRPC_CONFIG_B64}" && "${FRPC_CONFIG_B64}" != "null" ]]; then
+    FRPC_CONFIG="$(printf '%s' "${FRPC_CONFIG_B64}" | tr -d ' \t\r\n' | base64 -d 2>/dev/null || true)"
+    if [[ -z "${FRPC_CONFIG}" ]]; then
+        bashio::log.error "frpc_config_base64解码失败，请检查是否为完整的base64内容"
+        bashio::exit.nok
+    fi
+fi
 
 if [[ -z "${FRPC_CONFIG}" || "${FRPC_CONFIG}" == "null" ]]; then
-    bashio::log.error "未在插件配置页面填写frpc配置(frpc_config)，请粘贴frpc.toml内容后保存并重启插件"
+    bashio::log.error "未在插件配置页面填写frpc配置(frpc_config或frpc_config_base64)，请填写后保存并重启插件"
     bashio::exit.nok
 fi
 
