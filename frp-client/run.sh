@@ -7,21 +7,29 @@ function stop_frpc() {
     kill -15 "${WAIT_PIDS[@]}"
 }
 
-if ! bashio::config.has_value 'frpc_config'; then
+# 旧版bashio的config()内部read会返回非零，触发errexit，必须用|| true保护
+FRPC_CONFIG="$(bashio::config 'frpc_config' || true)"
+
+if [[ -z "${FRPC_CONFIG}" || "${FRPC_CONFIG}" == "null" ]]; then
     bashio::log.error "未在插件配置页面填写frpc配置(frpc_config)，请粘贴frpc.toml内容后保存并重启插件"
     bashio::exit.nok
 fi
 
-bashio::log.info "从插件配置页面读取frpc配置"
-bashio::config 'frpc_config' > "$CONFIG_PATH"
+# 若配置内容被前端挤成单行且只含字面\n，自动转换为真实换行
+if [[ "${FRPC_CONFIG}" != *$'\n'* && "${FRPC_CONFIG}" == *'\n'* ]]; then
+    bashio::log.warning "配置内容为单行，已自动将字面\\n转换为换行"
+    FRPC_CONFIG="${FRPC_CONFIG//\\n/$'\n'}"
+fi
 
-bashio::log.info "查看配置文件内容"
-cat "$CONFIG_PATH"
+printf '%s\n' "${FRPC_CONFIG}" > "${CONFIG_PATH}"
+
+bashio::log.info "已生成配置文件${CONFIG_PATH}，共$(grep -c '' "${CONFIG_PATH}")行"
+cat "${CONFIG_PATH}"
 
 bashio::log.info "尝试启动frpc，若失败，请仔细检查配置，并到插件配置页面修改"
 
 cd /usr/src
-./frpc -c "$CONFIG_PATH" & WAIT_PIDS+=($!)
+./frpc -c "${CONFIG_PATH}" & WAIT_PIDS+=($!)
 
 trap "stop_frpc" SIGTERM SIGHUP
 wait "${WAIT_PIDS[@]}"
