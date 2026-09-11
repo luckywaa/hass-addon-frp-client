@@ -10,8 +10,10 @@
   .sub{color:#999;font-size:.85rem;margin-bottom:12px}
   textarea{width:100%;box-sizing:border-box;height:60vh;min-height:300px;background:#1c1c1c;color:#e8e8e8;border:1px solid #444;border-radius:8px;padding:12px;font-family:ui-monospace,Consolas,monospace;font-size:13px;line-height:1.5;resize:vertical}
   .bar{display:flex;align-items:center;gap:12px;margin-top:12px;flex-wrap:wrap}
-  button{background:#03a9f4;border:none;color:#fff;padding:10px 22px;border-radius:8px;font-size:15px;cursor:pointer}
+  button{border:none;color:#fff;padding:10px 22px;border-radius:8px;font-size:15px;cursor:pointer}
   button:disabled{opacity:.5;cursor:wait}
+  #save{background:#43a047}
+  #run{background:#03a9f4}
   #status{font-size:.9rem}
   .ok{color:#7cd67c}.err{color:#ff7b72}.dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:6px}
   .on{background:#7cd67c}.off{background:#ff7b72}
@@ -19,30 +21,49 @@
 </head>
 <body>
 <h1>FRP 客户端配置</h1>
-<div class="sub">将 frpc.toml 内容粘贴到下面，点击保存后 frpc 会自动加载新配置。首次使用可参考 <a style="color:#6ec6ff" href="https://gofrp.org/zh-cn/docs/reference/config-reference/" target="_blank" rel="noreferrer">frpc 配置文档</a>。</div>
+<div class="sub">粘贴 frpc.toml 内容后点击「保存」（仅保存）或「启动/重启」（保存并立即生效）。首次使用可参考 <a style="color:#6ec6ff" href="https://gofrp.org/zh-cn/docs/reference/config-reference/" target="_blank" rel="noreferrer">frpc 配置文档</a>。</div>
 <textarea id="toml" spellcheck="false" placeholder="serverAddr = ..."></textarea>
 <div class="bar">
-  <button id="save">保存并生效</button>
+  <button id="save">保存</button>
+  <button id="run">启动 frpc</button>
   <span id="status"></span>
-  <span id="run" style="margin-left:auto"></span>
+  <span id="runState" style="margin-left:auto"></span>
 </div>
 <script>
-const ta=document.getElementById('toml'),btn=document.getElementById('save'),
-      st=document.getElementById('status'),run=document.getElementById('run');
+const ta=document.getElementById('toml'),btnSave=document.getElementById('save'),
+      btnRun=document.getElementById('run'),st=document.getElementById('status'),
+      runState=document.getElementById('runState');
+let running=false;
+
 fetch('cgi-bin/load').then(r=>r.json()).then(d=>{ta.value=d.toml||'';}).catch(()=>{});
+
 function refresh(){
   fetch('cgi-bin/status').then(r=>r.json()).then(d=>{
-    run.innerHTML=d.running?'<span class="dot on"></span>frpc 运行中':'<span class="dot off"></span>frpc 未运行';
-  }).catch(()=>{run.textContent='';});
+    running=!!d.running;
+    btnRun.textContent=running?'重启 frpc':'启动 frpc';
+    runState.innerHTML=running?'<span class="dot on"></span>frpc 运行中':'<span class="dot off"></span>frpc 未运行';
+  }).catch(()=>{runState.textContent='';});
 }
 refresh();setInterval(refresh,3000);
-btn.onclick=()=>{
-  btn.disabled=true;st.className='';st.textContent='保存中…';
+
+btnSave.onclick=()=>{
+  btnSave.disabled=true;st.className='';st.textContent='保存中…';
   fetch('cgi-bin/save',{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:ta.value})
     .then(r=>r.json())
-    .then(()=>{st.className='ok';st.textContent='已保存，frpc 正在重载';setTimeout(refresh,2500);setTimeout(refresh,6000);})
+    .then(()=>{st.className='ok';st.textContent=running?'已保存，点击「重启 frpc」生效':'已保存，点击「启动 frpc」生效';})
     .catch(()=>{st.className='err';st.textContent='保存失败，请查看加载项日志';})
-    .finally(()=>{btn.disabled=false;});
+    .finally(()=>{btnSave.disabled=false;});
+};
+
+btnRun.onclick=()=>{
+  btnRun.disabled=true;btnSave.disabled=true;
+  st.className='';st.textContent='保存并'+(running?'重启':'启动')+'中…';
+  fetch('cgi-bin/save',{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:ta.value})
+    .then(()=>fetch('cgi-bin/'+(running?'restart':'start'),{method:'POST'}))
+    .then(r=>r.json())
+    .then(()=>{st.className='ok';st.textContent='已生效，等待frpc连接…';setTimeout(refresh,1500);setTimeout(refresh,4000);setTimeout(refresh,8000);})
+    .catch(()=>{st.className='err';st.textContent='操作失败，请查看加载项日志';})
+    .finally(()=>{btnRun.disabled=false;btnSave.disabled=false;});
 };
 </script>
 </body>

@@ -59,6 +59,20 @@ case "${ROUTE}" in
             printf '{"ok":false}'
         fi
         ;;
+    "/cgi-bin/start"|"/cgi-bin/restart")
+        if [ "${METHOD}" != "POST" ]; then
+            respond "405 Method Not Allowed" "application/json"
+            printf '{"ok":false}'
+            exit 0
+        fi
+        if [ "${ROUTE}" = "/cgi-bin/start" ]; then
+            printf 'start' > /tmp/frpc.cmd
+        else
+            printf 'restart' > /tmp/frpc.cmd
+        fi
+        respond "200 OK" "application/json"
+        printf '{"ok":true}'
+        ;;
     *)
         respond "404 Not Found" "text/plain"
         printf 'not found'

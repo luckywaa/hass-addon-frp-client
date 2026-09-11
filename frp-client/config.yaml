@@ -1,6 +1,6 @@
 name: "FRP客户端自定义配置版"
-description: "支持网页配置页直接粘贴frpc.toml的frp加载项（HA侧边栏打开即用）"
-version: "0.59.0-3"
+description: "网页配置页直接粘贴frpc.toml，支持启动/重启与看门狗自动拉起"
+version: "0.59.0-4"
 slug: "frp_client_zdy"
 host_network: true
 startup: application
@@ -18,10 +18,4 @@ arch:
   - armhf
   - armv7
   - i386
-options:
-  frpc_config: ""
-  frpc_config_base64: ""
-schema:
-  frpc_config: str?
-  frpc_config_base64: str?
 
