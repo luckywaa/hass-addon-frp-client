@@ -14,15 +14,15 @@ There are no tests or linters. The frp-client image is built by Home Assistant's
 
 ```sh
 docker build --build-arg BUILD_FROM=homeassistant/amd64-base:3.10 \
-  --build-arg BUILD_ARCH=amd64 --build-arg FRP_VERSION=0.53.0 ./frp-client
+  --build-arg BUILD_ARCH=amd64 --build-arg FRP_VERSION=0.59.0 ./frp-client
 ```
 
 ## Version bumping (frp-client)
 
 The add-on version tracks the upstream frp release and must be changed in **two files together**:
 
-- `frp-client/config.yaml` → `version` (e.g. `"0.53.0"`)
-- `frp-client/build.json` → `args.FRP_VERSION` (e.g. `"0.53.0"`)
+- `frp-client/config.yaml` → `version` (e.g. `"0.59.0"`)
+- `frp-client/build.json` → `args.FRP_VERSION` (e.g. `"0.59.0"`)
 
 ## frp-client architecture
 
